@@ -191,10 +191,14 @@ def generate():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except requests.exceptions.Timeout:
+        app.logger.error("Request timed out") # Log detailed error
         return jsonify({"error": "Request timed out"}), 504
     except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to communicate with API: {str(e)}"}), 502
+        # Log the full error for server-side debugging, but don't expose it to the client
+        app.logger.error(f"Failed to communicate with API: {str(e)}")
+        return jsonify({"error": "Failed to communicate with API. Please check server logs for details."}), 502
     except APIError as e:
+        app.logger.error(f"API Error: {str(e)}") # Log detailed error
         return jsonify({"error": str(e)}), 500
     except Exception as e:
         app.logger.error(f"Unexpected error: {str(e)}")
@@ -268,10 +272,14 @@ def analyze_image():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except requests.exceptions.Timeout:
+        app.logger.error("Request timed out during image analysis") # Log detailed error
         return jsonify({"error": "Request timed out"}), 504
     except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to communicate with API: {str(e)}"}), 502
+        # Log the full error for server-side debugging, but don't expose it to the client
+        app.logger.error(f"Failed to communicate with Vision API: {str(e)}")
+        return jsonify({"error": "Failed to communicate with Vision API. Please check server logs for details."}), 502
     except APIError as e:
+        app.logger.error(f"Vision API Error: {str(e)}") # Log detailed error
         return jsonify({"error": str(e)}), 500
     except Exception as e:
         app.logger.error(f"Unexpected error: {str(e)}")
