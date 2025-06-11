@@ -38,9 +38,10 @@ os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 # API configuration
-BASE_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-TEXT_MODEL = "gemini-1.5-flash-001"  # Updated text model
-VISION_MODEL = "gemini-1.5-pro-001"  # Updated vision model
+# Use the latest stable Gemini API endpoints
+BASE_API_URL = "https://generativelanguage.googleapis.com/v1/models"
+TEXT_MODEL = "gemini-1.5-flash-latest"
+VISION_MODEL = "gemini-1.5-pro-latest"
 
 class APIError(Exception):
     """Custom exception for API related errors"""
@@ -211,11 +212,28 @@ def generate():
 @app.route("/analyze-image", methods=["POST"])
 def analyze_image():
     try:
-        # ... (既存のファイルチェック処理など) ...
+        # Check if a file was uploaded
+        if 'image' not in request.files:
+            return jsonify({"error": "No image file provided"}), 400
+
+        file = request.files['image']
+
+        # Check if the file is valid
+        if file.filename == '':
+            return jsonify({"error": "No image selected"}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"error": f"File type not allowed. Please upload {', '.join(ALLOWED_EXTENSIONS)}"}), 400
+
+        # Save the uploaded file
+        filename = secure_filename(file.filename)
+        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        file.save(filepath)
 
         # Encode image to base64
         image_data = encode_image(filepath)
-        
+
         # Prepare request data with image
         data = {
             "contents": [
@@ -234,43 +252,42 @@ def analyze_image():
                 }
             ]
         }
-        
-        api_url = f"{BASE_API_URL}/{VISION_MODEL}:generateContent?key={api_key}"
-        app.logger.info(f"Sending request to Vision API: {api_url}")
-        # app.logger.debug(f"Request data: {json.dumps(data)}") # 画像データが大きいため、必要に応じてコメントアウトを解除
 
         # Send request to Vision API
         response = requests.post(
-            api_url,
+            f"{BASE_API_URL}/{VISION_MODEL}:generateContent?key={api_key}",
             headers={"Content-Type": "application/json"},
             json=data,
-            timeout=30  # タイムアウトを30秒に設定
+            timeout=30
         )
-        
-        app.logger.info(f"Vision API response status code: {response.status_code}")
-        app.logger.info(f"Vision API response text: {response.text}") # APIからの生のレスポンスを出力
 
         # Check for HTTP errors
         response.raise_for_status()
-        
+
         # Process response
         result = response.json()
-        analysis = process_api_response(result) #
-        
+        analysis = process_api_response(result)
+
+        # Return the analysis along with the saved image path
         return jsonify({
             "analysis": analysis,
             "imagePath": url_for('static', filename=f'uploads/{unique_filename}')
         })
-        
-    # ... (既存の例外処理) ...
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except requests.exceptions.Timeout:
+        app.logger.error("Request timed out during image analysis")
+        return jsonify({"error": "Request timed out"}), 504
     except requests.exceptions.RequestException as e:
         app.logger.error(f"Failed to communicate with Vision API: {str(e)}")
-        # APIからのレスポンスオブジェクト `response` が存在すれば、それもログに出力するとさらに詳細がわかる場合があります。
-        # ただし、RequestExceptionの段階ではresponseオブジェクトが存在しないことも多いです。
-        # if 'response' in locals() and response is not None:
-        #    app.logger.error(f"Underlying API Response (if any): {response.text}")
         return jsonify({"error": "Failed to communicate with Vision API. Please check server logs for details."}), 502
-    # ... (その他の例外処理) ...
+    except APIError as e:
+        app.logger.error(f"Vision API Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        app.logger.error(f"Unexpected error: {str(e)}")
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
 
 
