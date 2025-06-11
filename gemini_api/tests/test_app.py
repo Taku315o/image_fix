@@ -12,8 +12,8 @@ def client():
     # Configure app for testing
     app.config["TESTING"] = True
     # Create test upload directories
-    os.makedirs('static/uploads', exist_ok=True)
-    os.makedirs('static/processed', exist_ok=True)
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
     with app.test_client() as client:
         yield client
 
@@ -59,7 +59,7 @@ def test_process_image_endpoint(client):
     # First create and save a test image
     from PIL import Image
     img = Image.new('RGB', (100, 100), color = 'blue')
-    test_path = os.path.join('static/uploads', 'test_process.jpg')
+    test_path = os.path.join(app.config['UPLOAD_FOLDER'], 'test_process.jpg')
     img.save(test_path)
     
     # Now process the image
@@ -82,7 +82,7 @@ def test_process_image_endpoint(client):
     if os.path.exists(test_path):
         os.remove(test_path)
     
-    processed_path = result['processedImage'].replace('/static/', '')
-    processed_path = os.path.join('static', processed_path)
+    processed_path = result['processedImage'].replace('/static/processed/', '')
+    processed_path = os.path.join(app.config['PROCESSED_FOLDER'], processed_path)
     if os.path.exists(processed_path):
         os.remove(processed_path)
